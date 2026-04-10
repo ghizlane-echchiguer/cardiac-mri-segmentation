@@ -145,7 +145,7 @@ jupyter notebook PredictWithUnet.ipynb
 
 ## 📄 Rapport
 
-Le rapport complet du projet est disponible dans [`report/rapport.pdf`](report/rapport.pdf).  
+Le rapport complet du projet est disponible dans [`report/rapport.pdf`](ProjetDL-mri-segmentation/report/rapport.pdf).  
 Il détaille la méthodologie, l'architecture, les résultats chiffrés et les visualisations des masques prédits.
 
 ---
