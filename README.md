@@ -8,65 +8,104 @@
 
 ## 📌 Description
 
-Ce projet implémente un modèle de **segmentation sémantique** de l'endocarde sur des images IRM cardiaques en coupe petit axe, en utilisant une architecture **U-Net** entraînée avec TensorFlow/Keras.
+Ce projet implémente un modèle de **segmentation sémantique de l'endocarde** sur des images IRM cardiaques 2D en utilisant une architecture **U-Net** entraînée avec TensorFlow/Keras.
 
-L'objectif est de produire automatiquement des masques de segmentation précis, comparables aux annotations manuelles réalisées par des experts cliniques, afin d'assister le diagnostic cardiologique.
+L'objectif est de remplacer les méthodes manuelles de segmentation — coûteuses en temps — par une approche automatisée capable de produire des masques précis, comparables aux annotations d'experts cliniques.
 
 ---
 
-## 🧠 Architecture
+## 🗂️ Structure du projet
 
 ```
-Input IRM (2D)
-     │
-  Encoder (Contracting Path)
-  ├── Conv2D + BN + ReLU  (×2)
-  ├── MaxPooling2D
-  └── ... (4 niveaux)
-     │
-  Bottleneck
-     │
-  Decoder (Expansive Path)
-  ├── UpSampling2D
-  ├── Skip Connections
-  └── Conv2D + BN + ReLU  (×2)
-     │
-Output Mask (sigmoid)
+cardiac-mri-segmentation/
+│
+├── model.py                    # Architecture U-Net complète
+├── metrics_and_losses.py       # Dice Loss + Binary Crossentropy hybride
+├── TrainUNet.ipynb              # Pipeline d'entraînement complet
+├── PredictWithUnet.ipynb        # Inférence et évaluation des résultats
+├── report/
+│   └── rapport.pdf              # Rapport complet du projet
+└── README.md
 ```
 
-**Architecture** : U-Net 2D  
-**Framework** : TensorFlow 2.x / Keras  
-**Fonction de perte** : Hybride — Dice Loss + Binary Crossentropy  
-**Optimiseur** : Adam  
-**Accélération** : GPU (Google Colab)
+---
+
+## 🧠 Architecture U-Net
+
+```
+Input IRM 2D (256×256, grayscale)
+        │
+   ┌────▼────────────────────────────────┐
+   │  ENCODEUR (Downsampling)            │
+   │  Conv2D(32) → Pool                  │
+   │  Conv2D(64) → Pool                  │
+   │  Conv2D(128) → Pool                 │
+   │  Conv2D(256) → Pool                 │
+   └────────────────┬────────────────────┘
+                    │
+   ┌────────────────▼────────────────────┐
+   │  BOTTLENECK — Conv2D(512)           │
+   └────────────────┬────────────────────┘
+                    │
+   ┌────────────────▼────────────────────┐
+   │  DÉCODEUR (Upsampling)              │
+   │  ConvTranspose + Skip Connections   │
+   │  Conv2D(256) → Conv2D(128)          │
+   │  Conv2D(64)  → Conv2D(32)           │
+   └────────────────┬────────────────────┘
+                    │
+         Output Mask — Conv2D(1, sigmoid)
+```
+
+| Paramètre | Valeur |
+|---|---|
+| Framework | TensorFlow 2.x / Keras |
+| Taille d'entrée | 256 × 256 px (niveaux de gris) |
+| Activation sortie | Sigmoid |
+| Optimiseur | Adam |
+| Fonction de perte | Dice Loss + Binary Crossentropy (pondération 50/50) |
+| Epochs | 50 |
+| Accélération | GPU (Google Colab) |
 
 ---
 
 ## ⚙️ Méthodologie
 
-### Prétraitement
-- Normalisation des intensités (min-max)
-- Redimensionnement des images en 256×256
-- Conversion des masques en binaire (endocarde / fond)
+### 1. Données
+- **330 images IRM 2D** annotées manuellement (endocarde)
+- Format `.png` — Images : `/frames` · Masques : `/masks_endo`
+- Split : **300 train / 30 validation**
 
-### Entraînement
-- **Data Augmentation** : rotations, flips horizontaux/verticaux, zoom aléatoire
-- **EarlyStopping** : patience = 15 époques sur la val_loss
-- **ReduceLROnPlateau** : réduction du learning rate si stagnation
+### 2. Prétraitement
+- Normalisation des pixels entre 0 et 1
+- Redimensionnement à 256 × 256 px
 
-### Évaluation
-- **Coefficient de Dice** (métrique principale)
-- Comparaison avec les annotations manuelles d'experts
+### 3. Data Augmentation (entraînement uniquement)
+```python
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    rotation_range=10,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    horizontal_flip=True
+)
+```
+
+### 4. Callbacks
+- **ModelCheckpoint** — sauvegarde des meilleurs poids
+- **EarlyStopping** — arrêt si la val_loss ne s'améliore plus
 
 ---
 
 ## 📊 Résultats
 
-| Métrique | Valeur |
-|---|---|
-| Dice Score (validation) | **~0.87** |
-| Loss finale | converge |
-| Robustesse | Data Augmentation + EarlyStopping |
+| Métrique | Entraînement | Validation |
+|---|---|---|
+| **Dice Coefficient** | **0.507** | **0.549** |
+| Distance Euclidienne | — | 6.84 |
+| Distance Hausdorff | — | 47.86 |
+
+> Les masques prédits montrent une bonne correspondance visuelle avec les annotations manuelles des experts cliniques (voir rapport pour figures).
 
 ---
 
@@ -77,47 +116,37 @@ Output Mask (sigmoid)
 ![Keras](https://img.shields.io/badge/Keras-D00000?style=flat&logo=keras&logoColor=white)
 ![NumPy](https://img.shields.io/badge/NumPy-013243?style=flat&logo=numpy&logoColor=white)
 ![OpenCV](https://img.shields.io/badge/OpenCV-5C3EE8?style=flat&logo=opencv&logoColor=white)
-
----
-
-## 📁 Structure du projet
-
-```
-cardiac-mri-segmentation/
-│
-├── model/
-│   └── unet_model.py          # Architecture U-Net
-│
-├── training/
-│   ├── train.py               # Script d'entraînement
-│   └── losses.py              # Dice Loss + BCE hybride
-│
-├── evaluation/
-│   └── metrics.py             # Calcul du coefficient de Dice
-│
-├── notebooks/
-│   └── cardiac_segmentation.ipynb   # Pipeline complet
-│
-├── results/
-│   └── figures/               # Courbes de loss, exemples de segmentation
-│
-└── README.md
-```
+![Colab](https://img.shields.io/badge/Google%20Colab-F9AB00?style=flat&logo=googlecolab&logoColor=white)
 
 ---
 
 ## 🚀 Utilisation
 
-```python
+```bash
 # Cloner le dépôt
 git clone https://github.com/ghizlane-echchiguer/cardiac-mri-segmentation.git
+cd cardiac-mri-segmentation
 
 # Installer les dépendances
-pip install tensorflow keras numpy opencv-python matplotlib
-
-# Lancer le notebook
-jupyter notebook notebooks/cardiac_segmentation.ipynb
+pip install tensorflow keras numpy opencv-python matplotlib scikit-image scipy
 ```
+
+```python
+# Entraînement — ouvrir le notebook
+jupyter notebook TrainUNet.ipynb
+
+# Prédiction et évaluation
+jupyter notebook PredictWithUnet.ipynb
+```
+
+> ⚠️ **Note** : Le dataset (images IRM) n'est pas inclus dans ce dépôt pour des raisons de confidentialité médicale. Les fichiers de poids `.h5` ne sont pas inclus en raison de leur taille.
+
+---
+
+## 📄 Rapport
+
+Le rapport complet du projet est disponible dans [`report/rapport.pdf`](report/rapport.pdf).  
+Il détaille la méthodologie, l'architecture, les résultats chiffrés et les visualisations des masques prédits.
 
 ---
 
@@ -126,9 +155,9 @@ jupyter notebook notebooks/cardiac_segmentation.ipynb
 | | |
 |---|---|
 | **Formation** | Master 2 Traitement du Signal et des Images – Imagerie et Technologie pour la Médecine |
-| **Établissement** | École Universitaire de Physique et d'Ingénierie (EUPI), Clermont-Ferrand |
+| **Établissement** | École Universitaire de Physique et d'Ingénierie (EUPI) — Université Clermont Auvergne |
 | **Année** | 2024 – 2025 |
-| **Encadrant** | Dr. Omar Aït Aider, Université Clermont Auvergne |
+| **Encadrant** | Dr. Omar Aït Aider |
 
 ---
 
@@ -140,4 +169,4 @@ Ingénieure Biomédicale · M2 TSI-ITM
 
 ---
 
-*Projet académique — Master 2 · 2024–2025*
+*Projet académique — Master 2 · Université Clermont Auvergne · 2024–2025*
